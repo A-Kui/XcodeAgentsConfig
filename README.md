@@ -1,7 +1,7 @@
 # kXcodeAgentsConfig
 
 一个 SwiftUI macOS 原型，用来管理 Xcode 26.3 (17C529) 的第三方 `Claude Code` / `Codex` Agent 配置，并一键应用到 Xcode 当前会读取的本地文件。
-
+![alt text](img/ClaudeCode-ExampleDiagram.png) ![alt text](img/codex-ExampleDiagram.png)
 ## 当前能力
 
 - 为 `Claude Code` 维护多组 `Base URL + API Key + Model` presets。
