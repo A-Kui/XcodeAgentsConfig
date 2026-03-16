@@ -6,24 +6,6 @@ enum AgentKind: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var title: String {
-        switch self {
-        case .claude:
-            "Claude Code"
-        case .codex:
-            "Codex"
-        }
-    }
-
-    var subtitle: String {
-        switch self {
-        case .claude:
-            "Anthropic-compatible endpoint override"
-        case .codex:
-            "OpenAI-compatible provider switcher"
-        }
-    }
-
     var systemImage: String {
         switch self {
         case .claude:
@@ -41,19 +23,6 @@ enum CodexAuthMode: String, Codable, CaseIterable, Identifiable {
     case custom
 
     var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .bearer:
-            "Authorization: Bearer"
-        case .apiKey:
-            "api-key"
-        case .xApiKey:
-            "x-api-key"
-        case .custom:
-            "Custom header"
-        }
-    }
 }
 
 struct ProviderPreset: Identifiable, Codable, Equatable {
@@ -113,32 +82,34 @@ struct ProviderPreset: Identifiable, Codable, Equatable {
         self.updatedAt = updatedAt
     }
 
-    static func starter(for agent: AgentKind) -> ProviderPreset {
-        switch agent {
+    static func starter(for agent: AgentKind, language: AppLanguage = .defaultValue) -> ProviderPreset {
+        let strings = AppStrings(language: language)
+
+        return switch agent {
         case .claude:
             ProviderPreset(
                 agentKind: .claude,
-                name: "Claude Compatible",
+                name: strings.claudeStarterName,
                 baseURL: "https://your-claude-proxy.example.com/v1",
                 model: "claude-sonnet-4-20250514",
-                notes: "Apply 后会写入 Xcode 的 ClaudeAgentConfig/settings.json。"
+                notes: strings.claudeStarterNotes
             )
         case .codex:
             ProviderPreset(
                 agentKind: .codex,
-                name: "Codex Compatible",
+                name: strings.codexStarterName,
                 baseURL: "https://your-openai-compatible.example.com/v1",
                 model: "gpt-5.2-codex",
                 codexWireAPI: "responses",
-                notes: "Apply 后会写入 Xcode 的 CodingAssistant/codex/config.toml。"
+                notes: strings.codexStarterNotes
             )
         }
     }
 
-    func duplicated() -> ProviderPreset {
+    func duplicated(language: AppLanguage) -> ProviderPreset {
         var copy = self
         copy.id = UUID()
-        copy.name = "\(name) Copy"
+        copy.name = AppStrings(language: language).duplicatedName(from: name)
         copy.createdAt = .now
         copy.updatedAt = .now
         return copy
@@ -147,6 +118,7 @@ struct ProviderPreset: Identifiable, Codable, Equatable {
 
 struct PersistedState: Codable {
     var presets: [ProviderPreset]
+    var language: AppLanguage?
 }
 
 struct StatusBanner: Equatable {

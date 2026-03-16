@@ -1,22 +1,24 @@
 import AppKit
 import Foundation
 
-enum XcodeAgentConfiguratorError: LocalizedError {
+enum XcodeAgentConfiguratorError: Error {
     case missingValue(String)
     case xcodeNotFound
     case failedToCloseXcode
     case failedToLaunchXcode(String)
 
-    var errorDescription: String? {
-        switch self {
+    func message(in language: AppLanguage) -> String {
+        let strings = AppStrings(language: language)
+
+        return switch self {
         case .missingValue(let field):
-            "请先填写 \(field)"
+            strings.missingValue(field)
         case .xcodeNotFound:
-            "没有找到可启动的 Xcode.app"
+            strings.xcodeNotFound
         case .failedToCloseXcode:
-            "未能在预期时间内关闭 Xcode，请手动关闭后再试"
+            strings.failedToCloseXcode
         case .failedToLaunchXcode(let details):
-            "Xcode 重启失败：\(details)"
+            strings.failedToLaunchXcode(details: details)
         }
     }
 }
@@ -37,21 +39,21 @@ enum XcodeAgentConfigurator {
     static let codexConfigURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Developer/Xcode/CodingAssistant/codex/config.toml", isDirectory: false)
 
-    static func apply(_ preset: ProviderPreset) throws -> ApplyResult {
+    static func apply(_ preset: ProviderPreset, language: AppLanguage) throws -> ApplyResult {
         switch preset.agentKind {
         case .claude:
-            try applyClaude(preset)
+            try applyClaude(preset, language: language)
         case .codex:
-            try applyCodex(preset)
+            try applyCodex(preset, language: language)
         }
     }
 
-    static func reset(agent: AgentKind) throws -> ApplyResult {
+    static func reset(agent: AgentKind, language: AppLanguage) throws -> ApplyResult {
         switch agent {
         case .claude:
-            try resetClaude()
+            try resetClaude(language: language)
         case .codex:
-            try resetCodex()
+            try resetCodex(language: language)
         }
     }
 
@@ -76,7 +78,7 @@ enum XcodeAgentConfigurator {
     }
 
     @MainActor
-    static func restartXcode() async throws {
+    static func restartXcode(language: AppLanguage) async throws {
         let bundleIdentifier = "com.apple.dt.Xcode"
         guard let xcodeURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) else {
             throw XcodeAgentConfiguratorError.xcodeNotFound
@@ -116,8 +118,8 @@ enum XcodeAgentConfigurator {
         }
     }
 
-    private static func applyClaude(_ preset: ProviderPreset) throws -> ApplyResult {
-        try validate(preset)
+    private static func applyClaude(_ preset: ProviderPreset, language: AppLanguage) throws -> ApplyResult {
+        try validate(preset, language: language)
 
         let directory = claudeSettingsURL.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -155,13 +157,13 @@ enum XcodeAgentConfigurator {
         xcodeDefaults?.synchronize()
 
         return ApplyResult(
-            summary: "Claude 自定义配置已写入，建议完全退出并重新打开 Xcode。",
+            summary: AppStrings(language: language).claudeApplySummary,
             writtenPaths: [claudeSettingsURL]
         )
     }
 
-    private static func applyCodex(_ preset: ProviderPreset) throws -> ApplyResult {
-        try validate(preset)
+    private static func applyCodex(_ preset: ProviderPreset, language: AppLanguage) throws -> ApplyResult {
+        try validate(preset, language: language)
 
         let directory = codexConfigURL.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -174,12 +176,12 @@ enum XcodeAgentConfigurator {
         try mergedContents.write(to: codexConfigURL, atomically: true, encoding: .utf8)
 
         return ApplyResult(
-            summary: "Codex provider 已切换到 \(preset.name)，建议完全退出并重新打开 Xcode。",
+            summary: AppStrings(language: language).codexApplySummary(presetName: preset.name),
             writtenPaths: [codexConfigURL]
         )
     }
 
-    private static func resetClaude() throws -> ApplyResult {
+    private static func resetClaude(language: AppLanguage) throws -> ApplyResult {
         if FileManager.default.fileExists(atPath: claudeSettingsURL.path(percentEncoded: false)) {
             try FileManager.default.removeItem(at: claudeSettingsURL)
         }
@@ -190,35 +192,37 @@ enum XcodeAgentConfigurator {
         xcodeDefaults?.synchronize()
 
         return ApplyResult(
-            summary: "Claude 自定义覆盖已移除，Xcode 将回到官方登录流。",
+            summary: AppStrings(language: language).claudeResetSummary,
             writtenPaths: [claudeSettingsURL]
         )
     }
 
-    private static func resetCodex() throws -> ApplyResult {
+    private static func resetCodex(language: AppLanguage) throws -> ApplyResult {
         let existingContents = (try? String(contentsOf: codexConfigURL, encoding: .utf8)) ?? ""
         let cleanedContents = removingManagedCodexBlocks(from: existingContents)
         try FileManager.default.createDirectory(at: codexConfigURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try cleanedContents.write(to: codexConfigURL, atomically: true, encoding: .utf8)
 
         return ApplyResult(
-            summary: "Codex 自定义 provider block 已移除。",
+            summary: AppStrings(language: language).codexResetSummary,
             writtenPaths: [codexConfigURL]
         )
     }
 
-    private static func validate(_ preset: ProviderPreset) throws {
+    private static func validate(_ preset: ProviderPreset, language: AppLanguage) throws {
+        let strings = AppStrings(language: language)
+
         if preset.name.isBlank {
-            throw XcodeAgentConfiguratorError.missingValue("名称")
+            throw XcodeAgentConfiguratorError.missingValue(strings.fieldNameName)
         }
         if preset.baseURL.isBlank {
-            throw XcodeAgentConfiguratorError.missingValue("Base URL")
+            throw XcodeAgentConfiguratorError.missingValue(strings.fieldNameBaseURL)
         }
         if preset.apiKey.isBlank {
-            throw XcodeAgentConfiguratorError.missingValue("API Key")
+            throw XcodeAgentConfiguratorError.missingValue(strings.fieldNameAPIKey)
         }
         if preset.model.isBlank {
-            throw XcodeAgentConfiguratorError.missingValue("Model")
+            throw XcodeAgentConfiguratorError.missingValue(strings.fieldNameModel)
         }
     }
 

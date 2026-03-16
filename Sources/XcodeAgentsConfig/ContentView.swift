@@ -6,6 +6,10 @@ struct ContentView: View {
     @State private var showRestartXcodeConfirmation = false
     @State private var isRestartingXcode = false
 
+    private var strings: AppStrings {
+        AppStrings(language: store.selectedLanguage)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -13,13 +17,13 @@ struct ContentView: View {
             TabView(selection: $store.selectedAgent) {
                 AgentWorkspaceView(store: store, agent: .claude)
                     .tabItem {
-                        Label(AgentKind.claude.title, systemImage: AgentKind.claude.systemImage)
+                        Label(AgentKind.claude.title(in: store.selectedLanguage), systemImage: AgentKind.claude.systemImage)
                     }
                     .tag(AgentKind.claude)
 
                 AgentWorkspaceView(store: store, agent: .codex)
                     .tabItem {
-                        Label(AgentKind.codex.title, systemImage: AgentKind.codex.systemImage)
+                        Label(AgentKind.codex.title(in: store.selectedLanguage), systemImage: AgentKind.codex.systemImage)
                     }
                     .tag(AgentKind.codex)
             }
@@ -32,14 +36,15 @@ struct ContentView: View {
             }
         }
         .background(Color(nsColor: .windowBackgroundColor))
-        .alert("重启 Xcode？", isPresented: $showRestartXcodeConfirmation) {
-            Button("取消", role: .cancel) {}
-            Button("我已保存，立即重启", role: .destructive) {
+        .environment(\.locale, store.selectedLanguage.locale)
+        .alert(strings.restartAlertTitle, isPresented: $showRestartXcodeConfirmation) {
+            Button(strings.cancel, role: .cancel) {}
+            Button(strings.restartNow, role: .destructive) {
                 restartXcode()
             }
             .disabled(isRestartingXcode)
         } message: {
-            Text("继续前，请先确认 Xcode 里的代码、断点调整和未保存编辑都已经处理完成。继续后会强制退出当前 Xcode，并立即重新打开。")
+            Text(strings.restartAlertMessage)
         }
     }
 
@@ -48,34 +53,43 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(AppMetadata.displayName)
                     .font(.system(size: 28, weight: .bold, design: .rounded))
-                Text("为 Xcode 26.3 (17C529) 的 Claude Code 和 Codex 维护第三方 Base URL / API Key 列表，并一键应用。")
+                Text(strings.appSubtitle)
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
             }
 
             Spacer(minLength: 0)
 
-            VStack(alignment: .leading, spacing: 6) {
-                headerLink(
-                    title: "Claude 写入 `ClaudeAgentConfig/settings.json`",
-                    agent: .claude
-                )
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    Text(strings.languageLabel)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
 
-                headerLink(
-                    title: "Codex 写入 `CodingAssistant/codex/config.toml`",
-                    agent: .codex
-                )
-
-                headerActionLink(
-                    title: "应用后建议完全重启 Xcode",
-                    systemImage: "arrow.clockwise.circle.fill",
-                    help: "点击确认后强制关闭并重新打开 Xcode"
-                ) {
-                    showRestartXcodeConfirmation = true
+                    Picker(strings.languageLabel, selection: $store.selectedLanguage) {
+                        ForEach(AppLanguage.allCases) { language in
+                            Text(language.displayName).tag(language)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 170)
+                    .labelsHidden()
                 }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    headerLink(for: .claude)
+                    headerLink(for: .codex)
+
+                    headerActionLink(
+                        title: strings.restartRecommendationTitle,
+                        systemImage: "arrow.clockwise.circle.fill",
+                        help: strings.restartRecommendationHelp
+                    ) {
+                        showRestartXcodeConfirmation = true
+                    }
+                }
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(.secondary)
             }
-            .font(.system(size: 12, weight: .semibold, design: .rounded))
-            .foregroundStyle(.secondary)
         }
         .padding(22)
         .background(
@@ -93,15 +107,15 @@ struct ContentView: View {
 
     private func revealConfiguration(for agent: AgentKind) {
         XcodeAgentConfigurator.revealConfiguration(for: agent)
-        store.updateStatus(.init(kind: .info, message: "已在访达中定位 \(agent.title) 配置文件。"))
+        store.updateStatus(.init(kind: .info, message: strings.revealConfigurationStatus(for: agent)))
     }
 
     @ViewBuilder
-    private func headerLink(title: String, agent: AgentKind) -> some View {
+    private func headerLink(for agent: AgentKind) -> some View {
         headerActionLink(
-            title: title,
+            title: strings.headerLinkTitle(for: agent),
             systemImage: "link.circle.fill",
-            help: "点击在访达中打开 \(agent.title) 配置文件"
+            help: strings.revealConfigurationHelp(for: agent)
         ) {
             revealConfiguration(for: agent)
         }
@@ -145,20 +159,23 @@ struct ContentView: View {
             return
         }
 
+        let language = store.selectedLanguage
+        let strings = AppStrings(language: language)
+
         isRestartingXcode = true
-        store.updateStatus(.init(kind: .info, message: "正在重启 Xcode..."))
+        store.updateStatus(.init(kind: .info, message: strings.restartInProgress))
 
         Task {
             do {
-                try await XcodeAgentConfigurator.restartXcode()
+                try await XcodeAgentConfigurator.restartXcode(language: language)
                 await MainActor.run {
                     isRestartingXcode = false
-                    store.updateStatus(.init(kind: .success, message: "已强制关闭并重新打开 Xcode。"))
+                    store.updateStatus(.init(kind: .success, message: strings.restartSucceeded))
                 }
             } catch {
                 await MainActor.run {
                     isRestartingXcode = false
-                    store.updateStatus(.init(kind: .error, message: error.localizedDescription))
+                    store.updateStatus(.init(kind: .error, message: language.message(for: error)))
                 }
             }
         }
@@ -173,6 +190,10 @@ private struct AgentWorkspaceView: View {
     @ObservedObject var store: PresetStore
     let agent: AgentKind
 
+    private var strings: AppStrings {
+        AppStrings(language: store.selectedLanguage)
+    }
+
     var body: some View {
         NavigationSplitView {
             sidebar
@@ -181,7 +202,7 @@ private struct AgentWorkspaceView: View {
                let binding = store.binding(for: selectedID) {
                 PresetEditorView(store: store, preset: binding)
             } else {
-                ContentUnavailableView("No Preset Selected", systemImage: agent.systemImage)
+                ContentUnavailableView(strings.noPresetSelected, systemImage: agent.systemImage)
             }
         }
         .navigationSplitViewColumnWidth(min: 260, ideal: 300)
@@ -208,8 +229,8 @@ private struct AgentWorkspaceView: View {
                 }
             } header: {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(agent.title)
-                    Text(agent.subtitle)
+                    Text(agent.title(in: store.selectedLanguage))
+                    Text(agent.subtitle(in: store.selectedLanguage))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -220,19 +241,19 @@ private struct AgentWorkspaceView: View {
                 Button {
                     store.addPreset(for: agent)
                 } label: {
-                    Label("Add", systemImage: "plus")
+                    Label(strings.add, systemImage: "plus")
                 }
 
                 Button {
                     store.duplicateSelection(for: agent)
                 } label: {
-                    Label("Duplicate", systemImage: "plus.square.on.square")
+                    Label(strings.duplicate, systemImage: "plus.square.on.square")
                 }
 
                 Button(role: .destructive) {
                     store.deleteSelection(for: agent)
                 } label: {
-                    Label("Delete", systemImage: "trash")
+                    Label(strings.delete, systemImage: "trash")
                 }
             }
         }
@@ -242,6 +263,10 @@ private struct AgentWorkspaceView: View {
 private struct PresetEditorView: View {
     @ObservedObject var store: PresetStore
     @Binding var preset: ProviderPreset
+
+    private var strings: AppStrings {
+        AppStrings(language: store.selectedLanguage)
+    }
 
     var body: some View {
         ScrollView {
@@ -264,10 +289,10 @@ private struct PresetEditorView: View {
                         .font(.system(size: 28))
                         .foregroundStyle(accentColor)
                     VStack(alignment: .leading, spacing: 4) {
-                        TextField("Preset name", text: $preset.name)
+                        TextField(strings.presetNamePlaceholder, text: $preset.name)
                             .font(.system(size: 24, weight: .bold, design: .rounded))
                             .textFieldStyle(.plain)
-                        Text(preset.agentKind.title)
+                        Text(preset.agentKind.title(in: store.selectedLanguage))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.secondary)
                     }
@@ -277,14 +302,17 @@ private struct PresetEditorView: View {
                 Divider()
 
                 HStack(spacing: 14) {
-                    summaryPill(title: "Base URL", value: preset.baseURL.isBlank ? "Not set" : preset.baseURL)
-                    summaryPill(title: "Model", value: preset.model.isBlank ? "Not set" : preset.model)
-                    summaryPill(title: "Auth", value: preset.agentKind == .codex ? preset.codexAuthMode.title : "Anthropic env")
+                    summaryPill(title: strings.baseURL, value: preset.baseURL.isBlank ? strings.notSet : preset.baseURL)
+                    summaryPill(title: strings.model, value: preset.model.isBlank ? strings.notSet : preset.model)
+                    summaryPill(
+                        title: strings.auth,
+                        value: preset.agentKind == .codex ? preset.codexAuthMode.title(in: store.selectedLanguage) : strings.anthropicEnv
+                    )
                 }
             }
             .padding(6)
         } label: {
-            Label("Current Preset", systemImage: "slider.horizontal.3")
+            Label(strings.currentPreset, systemImage: "slider.horizontal.3")
         }
     }
 
@@ -292,9 +320,9 @@ private struct PresetEditorView: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 18) {
                 Group {
-                    TextField("Base URL", text: $preset.baseURL)
-                    SecureField("API Key", text: $preset.apiKey)
-                    TextField("Model", text: $preset.model)
+                    TextField(strings.baseURL, text: $preset.baseURL)
+                    SecureField(strings.apiKey, text: $preset.apiKey)
+                    TextField(strings.model, text: $preset.model)
                 }
                 .textFieldStyle(.roundedBorder)
 
@@ -308,47 +336,47 @@ private struct PresetEditorView: View {
             }
             .padding(6)
         } label: {
-            Label("Configuration", systemImage: "gearshape.2")
+            Label(strings.configuration, systemImage: "gearshape.2")
         }
     }
 
     @ViewBuilder
     private var codexFields: some View {
-        Picker("Auth header", selection: $preset.codexAuthMode) {
+        Picker(strings.authHeader, selection: $preset.codexAuthMode) {
             ForEach(CodexAuthMode.allCases) { mode in
-                Text(mode.title).tag(mode)
+                Text(mode.title(in: store.selectedLanguage)).tag(mode)
             }
         }
         .pickerStyle(.segmented)
 
         if preset.codexAuthMode == .custom {
-            TextField("Custom header name", text: $preset.codexCustomHeaderName)
+            TextField(strings.customHeaderName, text: $preset.codexCustomHeaderName)
                 .textFieldStyle(.roundedBorder)
         }
 
-        TextField("Wire API", text: $preset.codexWireAPI)
+        TextField(strings.wireAPI, text: $preset.codexWireAPI)
             .textFieldStyle(.roundedBorder)
 
         VStack(alignment: .leading, spacing: 6) {
-            Text("Query parameters")
+            Text(strings.queryParameters)
                 .font(.headline)
             TextEditor(text: $preset.codexQueryParameters)
                 .font(.system(.body, design: .monospaced))
                 .frame(minHeight: 90)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
-            Text("每行一个 `key=value`，例如 `api-version=2025-04-01-preview`。")
+            Text(strings.queryParametersHint)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
 
         VStack(alignment: .leading, spacing: 6) {
-            Text("Extra headers")
+            Text(strings.extraHeaders)
                 .font(.headline)
             TextEditor(text: $preset.codexExtraHeaders)
                 .font(.system(.body, design: .monospaced))
                 .frame(minHeight: 110)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
-            Text("每行一个 `Header=Value`。API key header 会在应用时自动补进去。")
+            Text(strings.extraHeadersHint)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -357,20 +385,20 @@ private struct PresetEditorView: View {
     @ViewBuilder
     private var claudeFields: some View {
         Stepper(value: $preset.claudeTimeoutMilliseconds, in: 1_000...900_000, step: 1_000) {
-            Text("Timeout: \(preset.claudeTimeoutMilliseconds) ms")
+            Text(strings.timeout(preset.claudeTimeoutMilliseconds))
         }
 
-        TextField("CA certificate path (optional)", text: $preset.claudeCACertificatePath)
+        TextField(strings.caCertificatePathOptional, text: $preset.claudeCACertificatePath)
             .textFieldStyle(.roundedBorder)
 
         VStack(alignment: .leading, spacing: 6) {
-            Text("Extra env")
+            Text(strings.extraEnv)
                 .font(.headline)
             TextEditor(text: $preset.claudeExtraEnv)
                 .font(.system(.body, design: .monospaced))
                 .frame(minHeight: 130)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
-            Text("每行一个 `KEY=VALUE`。会和 `ANTHROPIC_BASE_URL` / `ANTHROPIC_MODEL` 一起写入。")
+            Text(strings.extraEnvHint)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -379,7 +407,7 @@ private struct PresetEditorView: View {
     private var notesCard: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Notes")
+                Text(strings.notes)
                     .font(.headline)
                 TextEditor(text: $preset.notes)
                     .frame(minHeight: 120)
@@ -387,7 +415,7 @@ private struct PresetEditorView: View {
             }
             .padding(6)
         } label: {
-            Label("Notes", systemImage: "note.text")
+            Label(strings.notes, systemImage: "note.text")
         }
     }
 
@@ -395,30 +423,30 @@ private struct PresetEditorView: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Button("Apply to Xcode") {
+                    Button(strings.applyToXcode) {
                         applyCurrentPreset()
                     }
                     .buttonStyle(.borderedProminent)
 
-                    Button("Reveal Config File") {
+                    Button(strings.revealConfigFile) {
                         XcodeAgentConfigurator.revealConfiguration(for: preset.agentKind)
-                        store.updateStatus(.init(kind: .info, message: "已在 Finder 中定位配置文件。"))
+                        store.updateStatus(.init(kind: .info, message: strings.revealConfigFileStatus))
                     }
                     .buttonStyle(.bordered)
 
-                    Button("Reset to Official") {
+                    Button(strings.resetToOfficial) {
                         resetCurrentAgent()
                     }
                     .buttonStyle(.bordered)
                 }
 
-                Text(helpText)
+                Text(strings.helpText(for: preset.agentKind))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
             .padding(6)
         } label: {
-            Label("Actions", systemImage: "wand.and.stars")
+            Label(strings.actions, systemImage: "wand.and.stars")
         }
     }
 
@@ -428,15 +456,6 @@ private struct PresetEditorView: View {
             Color(red: 0.86, green: 0.42, blue: 0.24)
         case .codex:
             Color(red: 0.14, green: 0.44, blue: 0.80)
-        }
-    }
-
-    private var helpText: String {
-        switch preset.agentKind {
-        case .claude:
-            "Claude 会写入 `~/Library/Developer/Xcode/CodingAssistant/ClaudeAgentConfig/settings.json`，并设置 `com.apple.dt.Xcode` 的 `IDEChatClaudeAgentAPIKeyOverride` / `IDEChatClaudeAgentModelConfigurationAlias`。"
-        case .codex:
-            "Codex 会在 `~/Library/Developer/Xcode/CodingAssistant/codex/config.toml` 顶部插入一个受管 block，保留其他已有配置。"
         }
     }
 
@@ -456,20 +475,24 @@ private struct PresetEditorView: View {
     }
 
     private func applyCurrentPreset() {
+        let language = store.selectedLanguage
+
         do {
-            let result = try XcodeAgentConfigurator.apply(preset)
+            let result = try XcodeAgentConfigurator.apply(preset, language: language)
             store.updateStatus(.init(kind: .success, message: result.summary))
         } catch {
-            store.updateStatus(.init(kind: .error, message: error.localizedDescription))
+            store.updateStatus(.init(kind: .error, message: language.message(for: error)))
         }
     }
 
     private func resetCurrentAgent() {
+        let language = store.selectedLanguage
+
         do {
-            let result = try XcodeAgentConfigurator.reset(agent: preset.agentKind)
+            let result = try XcodeAgentConfigurator.reset(agent: preset.agentKind, language: language)
             store.updateStatus(.init(kind: .success, message: result.summary))
         } catch {
-            store.updateStatus(.init(kind: .error, message: error.localizedDescription))
+            store.updateStatus(.init(kind: .error, message: language.message(for: error)))
         }
     }
 }

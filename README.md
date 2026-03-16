@@ -11,6 +11,7 @@
   - `x-api-key`
   - 自定义 header 名称
 - 支持为 `Codex` 增加额外 headers 和 query parameters。
+- 支持界面语言切换，可在中文和 English 之间切换，选择会持久化到本地状态文件。
 - 点击 `Apply to Xcode` 后，直接写入 Xcode 当前使用的配置位置。
 
 ## App 自身配置
@@ -18,6 +19,7 @@
 - App 维护的 preset 文件：
   - `~/Library/Application Support/kXcodeAgentsConfig/presets.json`
   - 如果检测到旧版 `~/Library/Application Support/XcodeAgentsConfig/presets.json`，首次启动会自动迁移
+  - 当前所选界面语言也会一并保存在这个状态文件里
 - SwiftPM 可执行入口：
   - `Sources/XcodeAgentsConfig/XcodeAgentsConfigApp.swift`
 - 为了让 SwiftPM 直接启动时成为正常前台 macOS 窗口应用，启动阶段会调用：

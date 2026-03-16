@@ -7,6 +7,15 @@ final class PresetStore: ObservableObject {
     @Published var selectedClaudePresetID: UUID?
     @Published var selectedCodexPresetID: UUID?
     @Published var selectedAgent: AgentKind = .claude
+    @Published var selectedLanguage: AppLanguage {
+        didSet {
+            guard selectedLanguage != oldValue else {
+                return
+            }
+
+            persist()
+        }
+    }
     @Published var statusBanner: StatusBanner?
 
     private let stateURL: URL
@@ -20,11 +29,13 @@ final class PresetStore: ObservableObject {
         decoder.dateDecodingStrategy = .iso8601
         encoder.dateEncodingStrategy = .iso8601
 
-        presets = Self.loadPresets(from: stateURL, decoder: decoder)
+        let persistedState = Self.loadState(from: stateURL, decoder: decoder)
+        selectedLanguage = persistedState?.language ?? .defaultValue
+        presets = persistedState?.presets ?? []
         if presets.isEmpty {
             presets = [
-                .starter(for: .claude),
-                .starter(for: .codex)
+                .starter(for: .claude, language: selectedLanguage),
+                .starter(for: .codex, language: selectedLanguage)
             ]
             persist()
         }
@@ -70,7 +81,7 @@ final class PresetStore: ObservableObject {
 
         return Binding(
             get: {
-                self.presets.first(where: { $0.id == presetID }) ?? .starter(for: .claude)
+                self.presets.first(where: { $0.id == presetID }) ?? .starter(for: .claude, language: self.selectedLanguage)
             },
             set: { newValue in
                 guard let index = self.presets.firstIndex(where: { $0.id == presetID }) else {
@@ -86,7 +97,7 @@ final class PresetStore: ObservableObject {
     }
 
     func addPreset(for agent: AgentKind) {
-        let preset = ProviderPreset.starter(for: agent)
+        let preset = ProviderPreset.starter(for: agent, language: selectedLanguage)
         presets.append(preset)
         setSelection(preset.id, for: agent)
         persist()
@@ -100,7 +111,7 @@ final class PresetStore: ObservableObject {
             return
         }
 
-        let copy = preset.duplicated()
+        let copy = preset.duplicated(language: selectedLanguage)
         presets.append(copy)
         setSelection(copy.id, for: agent)
         persist()
@@ -113,7 +124,7 @@ final class PresetStore: ObservableObject {
 
         presets.removeAll { $0.id == presetID }
         if presets(for: agent).isEmpty {
-            let replacement = ProviderPreset.starter(for: agent)
+            let replacement = ProviderPreset.starter(for: agent, language: selectedLanguage)
             presets.append(replacement)
             setSelection(replacement.id, for: agent)
         } else {
@@ -153,19 +164,20 @@ final class PresetStore: ObservableObject {
         do {
             let directory = stateURL.deletingLastPathComponent()
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let data = try encoder.encode(PersistedState(presets: presets))
+            let data = try encoder.encode(PersistedState(presets: presets, language: selectedLanguage))
             try data.write(to: stateURL, options: .atomic)
         } catch {
-            statusBanner = StatusBanner(kind: .error, message: "保存本地 presets 失败：\(error.localizedDescription)")
+            let strings = AppStrings(language: selectedLanguage)
+            statusBanner = StatusBanner(kind: .error, message: strings.saveLocalPresetsFailed(details: error.localizedDescription))
         }
     }
 
-    private static func loadPresets(from url: URL, decoder: JSONDecoder) -> [ProviderPreset] {
+    private static func loadState(from url: URL, decoder: JSONDecoder) -> PersistedState? {
         do {
             let data = try Data(contentsOf: url)
-            return try decoder.decode(PersistedState.self, from: data).presets
+            return try decoder.decode(PersistedState.self, from: data)
         } catch {
-            return []
+            return nil
         }
     }
 }
