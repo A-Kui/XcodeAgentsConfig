@@ -46,7 +46,7 @@ struct ContentView: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 18) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Xcode Agents Config")
+                Text(AppMetadata.displayName)
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                 Text("为 Xcode 26.3 (17C529) 的 Claude Code 和 Codex 维护第三方 Base URL / API Key 列表，并一键应用。")
                     .font(.system(size: 13, weight: .medium, design: .rounded))

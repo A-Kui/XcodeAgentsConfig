@@ -22,9 +22,15 @@ enum XcodeAgentConfiguratorError: LocalizedError {
 }
 
 enum XcodeAgentConfigurator {
-    private static let codexBeginMarker = "# BEGIN XcodeAgentsConfig managed codex override"
-    private static let codexEndMarker = "# END XcodeAgentsConfig managed codex override"
-    private static let codexManagedProviderKey = "xcode_agents_config"
+    private static let codexManagedProviderKey = "kxcode_agents_config"
+    private static let codexMarkers = ManagedBlockMarkers(
+        begin: "# BEGIN \(AppMetadata.displayName) managed codex override",
+        end: "# END \(AppMetadata.displayName) managed codex override"
+    )
+    private static let legacyCodexMarkers = ManagedBlockMarkers(
+        begin: "# BEGIN \(AppMetadata.legacyDisplayName) managed codex override",
+        end: "# END \(AppMetadata.legacyDisplayName) managed codex override"
+    )
 
     static let claudeSettingsURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Developer/Xcode/CodingAssistant/ClaudeAgentConfig/settings.json", isDirectory: false)
@@ -161,7 +167,7 @@ enum XcodeAgentConfigurator {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
         let existingContents = (try? String(contentsOf: codexConfigURL, encoding: .utf8)) ?? ""
-        let cleanedContents = removingManagedBlock(from: existingContents, beginMarker: codexBeginMarker, endMarker: codexEndMarker)
+        let cleanedContents = removingManagedCodexBlocks(from: existingContents)
         let managedBlock = codexManagedBlock(for: preset)
         let mergedContents = mergeManagedCodexBlock(managedBlock, into: cleanedContents)
 
@@ -191,7 +197,7 @@ enum XcodeAgentConfigurator {
 
     private static func resetCodex() throws -> ApplyResult {
         let existingContents = (try? String(contentsOf: codexConfigURL, encoding: .utf8)) ?? ""
-        let cleanedContents = removingManagedBlock(from: existingContents, beginMarker: codexBeginMarker, endMarker: codexEndMarker)
+        let cleanedContents = removingManagedCodexBlocks(from: existingContents)
         try FileManager.default.createDirectory(at: codexConfigURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try cleanedContents.write(to: codexConfigURL, atomically: true, encoding: .utf8)
 
@@ -241,7 +247,7 @@ enum XcodeAgentConfigurator {
         let wireAPI = preset.codexWireAPI.trimmed.isEmpty ? "responses" : preset.codexWireAPI.trimmed
 
         var lines = [
-            codexBeginMarker,
+            codexMarkers.begin,
             "model_provider = \(tomlString(codexManagedProviderKey))",
             "model = \(tomlString(model))",
             "",
@@ -261,7 +267,7 @@ enum XcodeAgentConfigurator {
             lines.append("query_params = \(tomlInlineTable(from: queryParameters))")
         }
 
-        lines.append(codexEndMarker)
+        lines.append(codexMarkers.end)
         return lines.joined(separator: "\n")
     }
 
@@ -282,6 +288,15 @@ enum XcodeAgentConfigurator {
         return managedBlock + "\n\n" + trimmedExisting + "\n"
     }
 
+    static func removingManagedCodexBlocks(from contents: String) -> String {
+        [legacyCodexMarkers, codexMarkers]
+            .reduce(contents) { partialResult, markers in
+                removingManagedBlock(from: partialResult, beginMarker: markers.begin, endMarker: markers.end)
+            }
+            .replacingOccurrences(of: "\n\n\n", with: "\n\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private static func removingManagedBlock(from contents: String, beginMarker: String, endMarker: String) -> String {
         guard
             let startRange = contents.range(of: beginMarker),
@@ -293,8 +308,6 @@ enum XcodeAgentConfigurator {
         var cleaned = contents
         cleaned.removeSubrange(startRange.lowerBound..<endRange.upperBound)
         return cleaned
-            .replacingOccurrences(of: "\n\n\n", with: "\n\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func parseKeyValueLines(_ source: String) -> [String: String] {
@@ -343,4 +356,9 @@ enum XcodeAgentConfigurator {
             .replacingOccurrences(of: "\n", with: "\\n")
         return "\"\(escaped)\""
     }
+}
+
+private struct ManagedBlockMarkers {
+    let begin: String
+    let end: String
 }

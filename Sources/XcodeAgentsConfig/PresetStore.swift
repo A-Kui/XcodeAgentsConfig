@@ -14,10 +14,7 @@ final class PresetStore: ObservableObject {
     private let decoder = JSONDecoder()
 
     init() {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support", isDirectory: true)
-        let directory = appSupport.appendingPathComponent("XcodeAgentsConfig", isDirectory: true)
-        stateURL = directory.appendingPathComponent("presets.json", isDirectory: false)
+        stateURL = AppPaths.stateURL()
 
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         decoder.dateDecodingStrategy = .iso8601

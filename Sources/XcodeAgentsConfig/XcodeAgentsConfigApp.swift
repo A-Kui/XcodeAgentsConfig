@@ -9,12 +9,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 @main
-struct XcodeAgentsConfigApp: App {
+struct KXcodeAgentsConfigApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = PresetStore()
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(AppMetadata.displayName) {
             ContentView(store: store)
         }
         .windowResizability(.contentSize)

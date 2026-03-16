@@ -3,13 +3,13 @@
 import PackageDescription
 
 let package = Package(
-    name: "XcodeAgentsConfig",
+    name: "kXcodeAgentsConfig",
     platforms: [
         .macOS(.v14)
     ],
     products: [
         .executable(
-            name: "XcodeAgentsConfig",
+            name: "kXcodeAgentsConfig",
             targets: ["XcodeAgentsConfig"]
         )
     ],
@@ -17,6 +17,11 @@ let package = Package(
         .executableTarget(
             name: "XcodeAgentsConfig",
             path: "Sources/XcodeAgentsConfig"
+        ),
+        .testTarget(
+            name: "XcodeAgentsConfigTests",
+            dependencies: ["XcodeAgentsConfig"],
+            path: "Tests/XcodeAgentsConfigTests"
         )
     ]
 )

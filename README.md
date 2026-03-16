@@ -1,4 +1,4 @@
-# XcodeAgentsConfig
+# kXcodeAgentsConfig
 
 一个 SwiftUI macOS 原型，用来管理 Xcode 26.3 (17C529) 的第三方 `Claude Code` / `Codex` Agent 配置，并一键应用到 Xcode 当前会读取的本地文件。
 
@@ -16,7 +16,8 @@
 ## App 自身配置
 
 - App 维护的 preset 文件：
-  - `~/Library/Application Support/XcodeAgentsConfig/presets.json`
+  - `~/Library/Application Support/kXcodeAgentsConfig/presets.json`
+  - 如果检测到旧版 `~/Library/Application Support/XcodeAgentsConfig/presets.json`，首次启动会自动迁移
 - SwiftPM 可执行入口：
   - `Sources/XcodeAgentsConfig/XcodeAgentsConfigApp.swift`
 - 为了让 SwiftPM 直接启动时成为正常前台 macOS 窗口应用，启动阶段会调用：
@@ -42,7 +43,7 @@
 ### 启动层面
 
 - `swift build` 可以正常通过。
-- `swift run` / 直接运行 `.build/debug/XcodeAgentsConfig` 可以启动 GUI。
+- `swift run` / 直接运行 `.build/debug/kXcodeAgentsConfig` 可以启动 GUI。
 - 如果不显式设置激活策略，系统会把它识别成 `BackgroundOnly`，进程存在但不是正常前台窗口应用。
 - 修正后，系统会把它识别成 `Foreground`。
 
@@ -158,6 +159,31 @@ swift run
 ```
 
 或者直接用 Xcode 打开 `Package.swift`。
+
+## 打包
+
+在仓库根目录执行：
+
+```bash
+./scripts/package_app.sh 1.0
+```
+
+脚本会使用仓库根目录的 `icon.png` 生成应用图标。
+
+生成产物：
+
+- `dist/kXcodeAgentsConfig.app`
+- `dist/kXcodeAgentsConfig-1.0-macOS.zip`
+
+如果需要生成可分发的拖拽安装镜像：
+
+```bash
+./scripts/package_dmg.sh 1.0
+```
+
+生成产物：
+
+- `dist/kXcodeAgentsConfig-1.0.dmg`
 
 ## 目前的边界
 
